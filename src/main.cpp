@@ -41,7 +41,7 @@ void setup_wifi()
 {
   delay(10);
   Serial.println();
-  Serial.print("Підключення до WiFi ");
+  Serial.print("Connecting to WiFi ");
   Serial.println(ssid);
 
   WiFi.begin(ssid, password);
@@ -58,8 +58,8 @@ void setup_wifi()
   }
 
   Serial.println();
-  Serial.println("WiFi підключено!");
-  Serial.print("IP адреса: ");
+  Serial.println("WiFi connected!");
+  Serial.print("IP address: ");
   Serial.println(WiFi.localIP());
 
   digitalWrite(LED_BLUE_2, HIGH);
@@ -73,7 +73,7 @@ void callback(char *topic, byte *payload, unsigned int length)
     message += (char)payload[i];
   }
 
-  Serial.print("Отримано повідомлення: ");
+  Serial.print("Received message: ");
   Serial.println(message);
 
   float waterLevel = message.toFloat();
@@ -82,16 +82,41 @@ void callback(char *topic, byte *payload, unsigned int length)
 
 void testLeds()
 {
-  Serial.println("Тест світлодіодів...");
-  // Послідовно включити всі світлодіоди для тестування
-  const float testLevels[] = {2, 5, 10, 14, 16, 20};
-  const int numLevels = sizeof(testLevels) / sizeof(testLevels[0]);
+  Serial.println("Testing LEDs...");
 
-  for (int i = 0; i < numLevels; i++)
+  offLeds();
+
+  for (int i = 0; i < 6; i++)
   {
-    controlLEDs(testLevels[i]);
+    switch (i)
+    {
+    case 0:
+      digitalWrite(LED_GREEN_1, HIGH);
+      break;
+    case 1:
+      digitalWrite(LED_GREEN_2, HIGH);
+      break;
+    case 2:
+      digitalWrite(LED_BLUE_1, HIGH);
+      break;
+    case 3:
+      digitalWrite(LED_BLUE_2, HIGH);
+      break;
+    case 4:
+      digitalWrite(LED_RED_1, HIGH);
+      break;
+    case 5:
+      digitalWrite(LED_RED_2, HIGH);
+      break;
+    default:
+      break;
+    }
+
     delay(100);
   }
+
+  offLeds();
+  delay(100);
 
   // Показати всі світлодіоди одночасно на 1 секунду
   digitalWrite(LED_GREEN_1, HIGH);
@@ -100,7 +125,7 @@ void testLeds()
   digitalWrite(LED_BLUE_2, HIGH);
   digitalWrite(LED_RED_1, HIGH);
   digitalWrite(LED_RED_2, HIGH);
-  delay(500);
+  delay(1000);
   offLeds();
 }
 
@@ -119,43 +144,72 @@ void controlLEDs(float level)
   // Вимкнути всі світлодіоди
   offLeds();
 
-  Serial.print("Рівень води: ");
+  Serial.print("Water level: ");
   Serial.println(level);
 
   // Логіка включення світлодіодів
+  int levelRange = 0;
+
+  // Визначаємо діапазон рівня
   if (level >= 2 && level < 5)
-  {
-    digitalWrite(LED_GREEN_1, HIGH);
-    Serial.println("Зелений LED 1 включено");
-  }
+    levelRange = 1;
   else if (level >= 5 && level < 10)
-  {
-    digitalWrite(LED_GREEN_2, HIGH);
-    Serial.println("Зелений LED 2 включено");
-  }
+    levelRange = 2;
   else if (level >= 10 && level < 14)
-  {
-    digitalWrite(LED_BLUE_1, HIGH);
-    Serial.println("Синій LED 1 включено");
-  }
+    levelRange = 3;
   else if (level >= 14 && level < 16)
-  {
-    digitalWrite(LED_BLUE_2, HIGH);
-    Serial.println("Синій LED 2 включено");
-  }
+    levelRange = 4;
   else if (level >= 16 && level < 20)
-  {
-    digitalWrite(LED_RED_1, HIGH);
-    Serial.println("Червоний LED 1 включено");
-  }
+    levelRange = 5;
   else if (level >= 20 && level <= 22)
-  {
-    digitalWrite(LED_RED_2, HIGH);
-    Serial.println("Червоний LED 2 включено");
-  }
+    levelRange = 6;
   else
+    levelRange = 0;
+
+  switch (levelRange)
   {
-    Serial.println("Значення поза діапазоном (2-22)");
+  case 1:
+    digitalWrite(LED_GREEN_1, HIGH);
+    digitalWrite(LED_GREEN_2, HIGH);
+    digitalWrite(LED_BLUE_1, HIGH);
+    digitalWrite(LED_BLUE_2, HIGH);
+    digitalWrite(LED_RED_1, HIGH);
+    digitalWrite(LED_RED_2, HIGH);
+    Serial.println("Green LED 1 ON");
+    break;
+  case 2:
+    digitalWrite(LED_GREEN_2, HIGH);
+    digitalWrite(LED_BLUE_1, HIGH);
+    digitalWrite(LED_BLUE_2, HIGH);
+    digitalWrite(LED_RED_1, HIGH);
+    digitalWrite(LED_RED_2, HIGH);
+    Serial.println("Green LED 2 ON");
+    break;
+  case 3:
+    digitalWrite(LED_BLUE_1, HIGH);
+    digitalWrite(LED_BLUE_2, HIGH);
+    digitalWrite(LED_RED_1, HIGH);
+    digitalWrite(LED_RED_2, HIGH);
+    Serial.println("Blue LED 1 ON");
+    break;
+  case 4:
+    digitalWrite(LED_BLUE_2, HIGH);
+    digitalWrite(LED_RED_1, HIGH);
+    digitalWrite(LED_RED_2, HIGH);
+    Serial.println("Blue LED 2 ON");
+    break;
+  case 5:
+    digitalWrite(LED_RED_1, HIGH);
+    digitalWrite(LED_RED_2, HIGH);
+    Serial.println("Red LED 1 ON");
+    break;
+  case 6:
+    digitalWrite(LED_RED_2, HIGH);
+    Serial.println("Red LED 2 ON");
+    break;
+  default:
+    Serial.println("Value out of range (2-22)");
+    break;
   }
 }
 
@@ -163,19 +217,19 @@ void reconnect()
 {
   while (!client.connected())
   {
-    Serial.print("Підключення до MQTT...");
+    Serial.print("Connecting to MQTT...");
     digitalWrite(LED_RED_1, HIGH);
     if (client.connect(mqtt_client_id, mqtt_user, mqtt_password))
     {
-      Serial.println("підключено!");
+      Serial.println("connected!");
       client.subscribe(mqtt_topic);
       digitalWrite(LED_RED_2, HIGH);
     }
     else
     {
-      Serial.print("невдача, код помилки = ");
+      Serial.print("failed, error code = ");
       Serial.print(client.state());
-      Serial.println(" спробую знову через 5 секунд");
+      Serial.println(" trying again in 5 seconds");
 
       digitalWrite(LED_RED_1, LOW);
 
@@ -186,15 +240,15 @@ void reconnect()
 
 void setup()
 {
-  Serial.begin(9600);
+  Serial.begin(115200);
+  delay(1000);
 
-  Serial.println("\n\n=== ПОЧАТОК ПРОГРАМИ ===");
   Serial.println("Water Level Indicator v1.0");
   Serial.println("==========================");
-  Serial.println("ESP8266 запущений!");
+  Serial.println("ESP8266 started!");
 
   // Ініціалізація пінів світлодіодів
-  Serial.println("Ініціалізація світлодіодів...");
+  Serial.println("Initializing LEDs...");
   pinMode(LED_GREEN_1, OUTPUT);
   pinMode(LED_GREEN_2, OUTPUT);
   pinMode(LED_BLUE_1, OUTPUT);
@@ -209,7 +263,7 @@ void setup()
   digitalWrite(LED_BLUE_2, LOW);
   digitalWrite(LED_RED_1, LOW);
   digitalWrite(LED_RED_2, LOW);
-  Serial.println("Світлодіоди ініціалізовані!");
+  Serial.println("LEDs initialized!");
 
   // Тест світлодіодів
   testLeds();
@@ -217,21 +271,21 @@ void setup()
   digitalWrite(LED_GREEN_1, HIGH);
   digitalWrite(LED_GREEN_2, HIGH);
 
-  Serial.println("Спроба підключення до WiFi...");
+  Serial.println("Attempting WiFi connection...");
   setup_wifi();
 
-  Serial.println("Налаштування MQTT...");
+  Serial.println("Setting up MQTT...");
   client.setServer(mqtt_server, 1883);
   client.setCallback(callback);
 
-  Serial.println("Water Level Indicator готовий до роботи!");
+  Serial.println("Water Level Indicator ready!");
 }
 
 void loop()
 {
   if (!client.connected())
   {
-    Serial.println("MQTT відключений, спроба перепідключення...");
+    Serial.println("MQTT disconnected, attempting reconnection...");
     reconnect();
   }
   client.loop();
