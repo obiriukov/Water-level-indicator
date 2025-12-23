@@ -13,6 +13,7 @@ const char *password = "44129347"; // Змініть на ваш WiFi парол
 
 // MQTT налаштування
 const char *mqtt_server = "192.168.50.50";     // Змініть на адресу вашого MQTT сервера
+// const char *mqtt_topic = "waterpump/distance"; // Топік для отримання даних
 const char *mqtt_topic = "waterpump/distance"; // Топік для отримання даних
 const char *mqtt_client_id = "ESP8266_WaterLevel";
 const char *mqtt_user = "mqtt-user";     // Замініть на ваш MQTT користувач (якщо потрібно)
@@ -86,7 +87,7 @@ void testLeds()
 
   offLeds();
 
-  for (int i = 0; i < 6; i++)
+  for (int i = 0; i < 18; i++)
   {
     switch (i)
     {
@@ -108,6 +109,42 @@ void testLeds()
     case 5:
       digitalWrite(LED_RED_2, HIGH);
       break;
+    case 6:
+      digitalWrite(LED_GREEN_1, LOW);
+      break;
+    case 7:
+      digitalWrite(LED_GREEN_2, LOW);
+      break;
+    case 8:
+      digitalWrite(LED_BLUE_1, LOW);
+      break;
+    case 9:
+      digitalWrite(LED_BLUE_2, LOW);
+      break;
+    case 10:
+      digitalWrite(LED_RED_1, LOW);
+      break;
+    case 11:
+      digitalWrite(LED_RED_2, LOW);
+      break;
+    case 12:
+      digitalWrite(LED_RED_2, HIGH);
+      break;
+    case 13:
+      digitalWrite(LED_RED_1, HIGH);
+      break;
+    case 14:
+      digitalWrite(LED_BLUE_2, HIGH);
+      break;
+    case 15:
+      digitalWrite(LED_BLUE_1, HIGH);
+      break;
+    case 16:
+      digitalWrite(LED_GREEN_2, HIGH);
+      break;
+    case 17:
+      digitalWrite(LED_GREEN_1, HIGH);
+      break;
     default:
       break;
     }
@@ -116,17 +153,7 @@ void testLeds()
   }
 
   offLeds();
-  delay(100);
-
-  // Показати всі світлодіоди одночасно на 1 секунду
-  digitalWrite(LED_GREEN_1, HIGH);
-  digitalWrite(LED_GREEN_2, HIGH);
-  digitalWrite(LED_BLUE_1, HIGH);
-  digitalWrite(LED_BLUE_2, HIGH);
-  digitalWrite(LED_RED_1, HIGH);
-  digitalWrite(LED_RED_2, HIGH);
   delay(1000);
-  offLeds();
 }
 
 void offLeds()
@@ -148,26 +175,29 @@ void controlLEDs(float level)
   Serial.println(level);
 
   // Логіка включення світлодіодів
+  int minLevel = 2;
+  int maxLevel = 19;
+  int maxRange = 6;
   int levelRange = 0;
 
-  // Визначаємо діапазон рівня
-  if (level >= 2 && level < 5)
-    levelRange = 1;
-  else if (level >= 5 && level < 10)
-    levelRange = 2;
-  else if (level >= 10 && level < 14)
-    levelRange = 3;
-  else if (level >= 14 && level < 16)
-    levelRange = 4;
-  else if (level >= 16 && level < 20)
-    levelRange = 5;
-  else if (level >= 20 && level <= 22)
-    levelRange = 6;
-  else
+  if(level < minLevel)
     levelRange = 0;
+  else if(level >= maxLevel)
+    levelRange = maxRange;
+  else
+  {
+    int coeficient = (maxLevel - minLevel) / maxRange;
+    levelRange = (int)((level - minLevel) / coeficient) + 1;
+  }
+  
+  Serial.println("Level Range: " + String(levelRange));
 
   switch (levelRange)
   {
+    case 0:
+    Serial.println("Water level below 2");
+    offLeds();
+    break;
   case 1:
     digitalWrite(LED_GREEN_1, HIGH);
     digitalWrite(LED_GREEN_2, HIGH);
@@ -209,6 +239,7 @@ void controlLEDs(float level)
     break;
   default:
     Serial.println("Value out of range (2-22)");
+    offLeds();
     break;
   }
 }
