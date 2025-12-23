@@ -176,7 +176,7 @@ void controlLEDs(float level)
 
   // Логіка включення світлодіодів
   int minLevel = 2;
-  int maxLevel = 19;
+  int maxLevel = 19+1;
   int maxRange = 6;
   int levelRange = 0;
 
