@@ -12,7 +12,7 @@ const char *ssid = "Watermelon";   // Змініть на вашу WiFi мере
 const char *password = "44129347"; // Змініть на ваш WiFi пароль
 
 // MQTT налаштування
-const char *mqtt_server = "192.168.50.50";     // Змініть на адресу вашого MQTT сервера
+const char *mqtt_server = "192.168.50.50"; // Змініть на адресу вашого MQTT сервера
 // const char *mqtt_topic = "waterpump/distance"; // Топік для отримання даних
 const char *mqtt_topic = "waterpump/distance"; // Топік для отримання даних
 const char *mqtt_client_id = "ESP8266_WaterLevel";
@@ -176,25 +176,25 @@ void controlLEDs(float level)
 
   // Логіка включення світлодіодів
   int minLevel = 2;
-  int maxLevel = 19+1;
+  int maxLevel = 19;
   int maxRange = 6;
   int levelRange = 0;
 
-  if(level < minLevel)
+  if (level < minLevel)
     levelRange = 0;
-  else if(level >= maxLevel)
+  else if (level >= maxLevel)
     levelRange = maxRange;
   else
   {
-    int coeficient = (maxLevel - minLevel) / maxRange;
+    int coeficient = ((maxLevel + 1) - minLevel) / maxRange;
     levelRange = (int)((level - minLevel) / coeficient) + 1;
   }
-  
+
   Serial.println("Level Range: " + String(levelRange));
 
   switch (levelRange)
   {
-    case 0:
+  case 0:
     Serial.println("Water level below 2");
     offLeds();
     break;
