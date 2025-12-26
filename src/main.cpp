@@ -1,31 +1,54 @@
 #include <Arduino.h>
 #include <ESP8266WiFi.h>
 #include <PubSubClient.h>
+#include <Wire.h>
+#include <VL53L0X.h>
 
 // Function declarations
-void controlLEDs(float level);
+void controlLEDs(int level);
 void offLeds();
 void testLeds();
+float readDistance();
+void initSensor();
+
+// VL53L0X сенсор
+VL53L0X sensor;
+
+// VL53L0X налаштування
+const int MIN_TANK_HEIGHT = 10; // Мінімальна висота бака в мм
+const int MAX_TANK_HEIGHT = 250; // Максимальна висота бака в мм
+const int MEASUREMENT_INTERVAL = 1000; // Інтервал вимірювань в мс
+int lastDistance = -1;
+unsigned long lastMeasurement = 0;
+bool fillingUp = false; // Чи заповнюється бак
+
+// Сенсорна кнопка для перемикання режиму
+const int TOUCH_BUTTON_PIN = D8; // Пін OUT сенсорної кнопки (підключити до D8)
+// Підключення: VCC -> 3.3V, GND -> GND, OUT -> D8
+bool lastTouchState = LOW;
+bool touchState = LOW;
+unsigned long lastTouchTime = 0;
+const unsigned long touchDebounceDelay = 100; // Трохи більший час для сенсорної кнопки
 
 // WiFi налаштування
-const char *ssid = "Watermelon";   // Змініть на вашу WiFi мережу
-const char *password = "44129347"; // Змініть на ваш WiFi пароль
+// const char *ssid = "Watermelon";   // Змініть на вашу WiFi мережу
+// const char *password = "44129347"; // Змініть на ваш WiFi пароль
 
-// MQTT налаштування
-const char *mqtt_server = "192.168.50.50"; // Змініть на адресу вашого MQTT сервера
+// // MQTT налаштування
+// const char *mqtt_server = "192.168.50.50"; // Змініть на адресу вашого MQTT сервера
+// // const char *mqtt_topic = "waterpump/distance"; // Топік для отримання даних
 // const char *mqtt_topic = "waterpump/distance"; // Топік для отримання даних
-const char *mqtt_topic = "waterpump/distance"; // Топік для отримання даних
-const char *mqtt_client_id = "ESP8266_WaterLevel";
-const char *mqtt_user = "mqtt-user";     // Замініть на ваш MQTT користувач (якщо потрібно)
-const char *mqtt_password = "mqtt-user"; // Замініть на ваш MQTT пароль (якщо потрібно)
+// const char *mqtt_client_id = "ESP8266_WaterLevel";
+// const char *mqtt_user = "mqtt-user";     // Замініть на ваш MQTT користувач (якщо потрібно)
+// const char *mqtt_password = "mqtt-user"; // Замініть на ваш MQTT пароль (якщо потрібно)
 
-// Піни для світлодіодів
-const int LED_GREEN_1 = D3; // Зелений LED 1 (2-5)
-const int LED_GREEN_2 = D4; // Зелений LED 2 (5-10)
-const int LED_BLUE_1 = D5;  // Синій LED 1 (10-14)
-const int LED_BLUE_2 = D6;  // Синій LED 2 (14-16)
-const int LED_RED_1 = D7;   // Червоний LED 1 (16-20)
-const int LED_RED_2 = D8;   // Червоний LED 2 (20-22)
+// Піни для 5-сегментного індикатора рівня
+const int SEGMENT_1 = D1; // Сегмент 1 (найнижчий рівень)
+const int SEGMENT_2 = D2; // Сегмент 2
+const int SEGMENT_3 = D3; // Сегмент 3 (середній рівень)
+const int SEGMENT_4 = D4; // Сегмент 4
+const int SEGMENT_5 = D7; // Сегмент 5 (найвищий рівень)
+const int MAX_SEGMENTS = 5; // Кількість сегментів
 
 enum LedMode
 {
@@ -38,118 +61,106 @@ LedMode currentLedMode = LED_WIFI_CONNECTING;
 WiFiClient espClient;
 PubSubClient client(espClient);
 
-void setup_wifi()
-{
-  delay(10);
-  Serial.println();
-  Serial.print("Connecting to WiFi ");
-  Serial.println(ssid);
+// void setup_wifi()
+// {
+//   delay(10);
+//   Serial.println();
+//   Serial.print("Connecting to WiFi ");
+//   Serial.println(ssid);
 
-  WiFi.begin(ssid, password);
+//   WiFi.begin(ssid, password);
 
-  digitalWrite(LED_BLUE_1, HIGH);
+//   digitalWrite(SEGMENT_3, HIGH); // Показуємо підключення WiFi
 
-  while (WiFi.status() != WL_CONNECTED)
-  {
-    digitalWrite(LED_BLUE_2, HIGH);
-    delay(100);
-    digitalWrite(LED_BLUE_2, LOW);
-    delay(100);
-    Serial.print(".");
-  }
+//   while (WiFi.status() != WL_CONNECTED)
+//   {
+//     digitalWrite(SEGMENT_4, HIGH);
+//     delay(100);
+//     digitalWrite(SEGMENT_4, LOW);
+//     delay(100);
+//     Serial.print(".");
+//   }
 
-  Serial.println();
-  Serial.println("WiFi connected!");
-  Serial.print("IP address: ");
-  Serial.println(WiFi.localIP());
+//   Serial.println();
+//   Serial.println("WiFi connected!");
+//   Serial.print("IP address: ");
+//   Serial.println(WiFi.localIP());
 
-  digitalWrite(LED_BLUE_2, HIGH);
-}
+//   digitalWrite(SEGMENT_5, HIGH); // Показуємо успішне підключення
+// }
 
-void callback(char *topic, byte *payload, unsigned int length)
-{
-  String message = "";
-  for (unsigned int i = 0; i < length; i++)
-  {
-    message += (char)payload[i];
-  }
+// void callback(char *topic, byte *payload, unsigned int length)
+// {
+//   String message = "";
+//   for (unsigned int i = 0; i < length; i++)
+//   {
+//     message += (char)payload[i];
+//   }
 
-  Serial.print("Received message: ");
-  Serial.println(message);
+//   Serial.print("Received message: ");
+//   Serial.println(message);
 
-  float waterLevel = message.toFloat();
-  controlLEDs(waterLevel);
-}
+//   float waterLevel = message.toFloat();
+//   controlLEDs(waterLevel);
+// }
 
 void testLeds()
 {
-  Serial.println("Testing LEDs...");
+  Serial.println("Testing 5-segment indicator...");
 
   offLeds();
 
-  for (int i = 0; i < 18; i++)
+  // Тест: послідовне включення сегментів
+  for (int i = 1; i <= 5; i++)
+  {
+    Serial.print("Testing segment ");
+    Serial.println(i);
+    
+    switch (i)
+    {
+    case 1:
+      digitalWrite(SEGMENT_1, HIGH);
+      break;
+    case 2:
+      digitalWrite(SEGMENT_2, HIGH);
+      break;
+    case 3:
+      digitalWrite(SEGMENT_3, HIGH);
+      break;
+    case 4:
+      digitalWrite(SEGMENT_4, HIGH);
+      break;
+    case 5:
+      digitalWrite(SEGMENT_5, HIGH);
+      break;
+    }
+    delay(50);
+  }
+  
+  delay(500);
+  
+  // Тест: послідовне вимкнення
+  for (int i = 5; i >= 1; i--)
   {
     switch (i)
     {
-    case 0:
-      digitalWrite(LED_GREEN_1, HIGH);
-      break;
     case 1:
-      digitalWrite(LED_GREEN_2, HIGH);
+      digitalWrite(SEGMENT_1, LOW);
       break;
     case 2:
-      digitalWrite(LED_BLUE_1, HIGH);
+      digitalWrite(SEGMENT_2, LOW);
       break;
     case 3:
-      digitalWrite(LED_BLUE_2, HIGH);
+      digitalWrite(SEGMENT_3, LOW);
       break;
     case 4:
-      digitalWrite(LED_RED_1, HIGH);
+      digitalWrite(SEGMENT_4, LOW);
       break;
     case 5:
-      digitalWrite(LED_RED_2, HIGH);
-      break;
-    case 6:
-      digitalWrite(LED_GREEN_1, LOW);
-      break;
-    case 7:
-      digitalWrite(LED_GREEN_2, LOW);
-      break;
-    case 8:
-      digitalWrite(LED_BLUE_1, LOW);
-      break;
-    case 9:
-      digitalWrite(LED_BLUE_2, LOW);
-      break;
-    case 10:
-      digitalWrite(LED_RED_1, LOW);
-      break;
-    case 11:
-      digitalWrite(LED_RED_2, LOW);
-      break;
-    case 12:
-      digitalWrite(LED_RED_2, HIGH);
-      break;
-    case 13:
-      digitalWrite(LED_RED_1, HIGH);
-      break;
-    case 14:
-      digitalWrite(LED_BLUE_2, HIGH);
-      break;
-    case 15:
-      digitalWrite(LED_BLUE_1, HIGH);
-      break;
-    case 16:
-      digitalWrite(LED_GREEN_2, HIGH);
-      break;
-    case 17:
-      digitalWrite(LED_GREEN_1, HIGH);
-      break;
-    default:
+      digitalWrite(SEGMENT_5, LOW);
       break;
     }
-
-    delay(100);
+    delay(50);
   }
 
   offLeds();
@@ -158,115 +169,156 @@ void testLeds()
 
 void offLeds()
 {
-  digitalWrite(LED_GREEN_1, LOW);
-  digitalWrite(LED_GREEN_2, LOW);
-  digitalWrite(LED_BLUE_1, LOW);
-  digitalWrite(LED_BLUE_2, LOW);
-  digitalWrite(LED_RED_1, LOW);
-  digitalWrite(LED_RED_2, LOW);
+  digitalWrite(SEGMENT_1, LOW);
+  digitalWrite(SEGMENT_2, LOW);
+  digitalWrite(SEGMENT_3, LOW);
+  digitalWrite(SEGMENT_4, LOW);
+  digitalWrite(SEGMENT_5, LOW);
 }
 
-void controlLEDs(float level)
+void controlLEDs(int level)
 {
-  // Вимкнути всі світлодіоди
+  // Вимкнути всі сегменти
   offLeds();
 
   Serial.print("Water level: ");
   Serial.println(level);
 
-  // Логіка включення світлодіодів
-  int minLevel = 2;
-  int maxLevel = 19;
-  int maxRange = 6;
-  int levelRange = 0;
+  // Логіка включення сегментів
+  int activeSegments = 0;
 
-  if (level < minLevel)
-    levelRange = 0;
-  else if (level >= maxLevel)
-    levelRange = maxRange;
+  if (level < MIN_TANK_HEIGHT)
+    activeSegments = 0;
+  else if (level >= MAX_TANK_HEIGHT)
+    activeSegments = MAX_SEGMENTS;
   else
   {
-    int coeficient = ((maxLevel + 1) - minLevel) / maxRange;
-    levelRange = (int)((level - minLevel) / coeficient) + 1;
+    int levelRange = MAX_TANK_HEIGHT - MIN_TANK_HEIGHT;
+    int segmentRange = levelRange / MAX_SEGMENTS;
+    activeSegments = (int)((level - MIN_TANK_HEIGHT) / segmentRange) + 1;
+    if (activeSegments > MAX_SEGMENTS) activeSegments = MAX_SEGMENTS;
   }
 
-  Serial.println("Level Range: " + String(levelRange));
+  Serial.println("Active segments: " + String(activeSegments));
 
-  switch (levelRange)
+  // Включаємо сегменти знизу вгору залежно від рівня
+  switch (activeSegments)
   {
   case 0:
-    Serial.println("Water level below 2");
-    offLeds();
+    Serial.println("Water level too low - no segments");
     break;
   case 1:
-    digitalWrite(LED_GREEN_1, HIGH);
-    digitalWrite(LED_GREEN_2, HIGH);
-    digitalWrite(LED_BLUE_1, HIGH);
-    digitalWrite(LED_BLUE_2, HIGH);
-    digitalWrite(LED_RED_1, HIGH);
-    digitalWrite(LED_RED_2, HIGH);
-    Serial.println("Green LED 1 ON");
+    digitalWrite(SEGMENT_1, HIGH);
+    Serial.println("Segment 1 ON (Low level)");
     break;
   case 2:
-    digitalWrite(LED_GREEN_2, HIGH);
-    digitalWrite(LED_BLUE_1, HIGH);
-    digitalWrite(LED_BLUE_2, HIGH);
-    digitalWrite(LED_RED_1, HIGH);
-    digitalWrite(LED_RED_2, HIGH);
-    Serial.println("Green LED 2 ON");
+    digitalWrite(SEGMENT_1, HIGH);
+    digitalWrite(SEGMENT_2, HIGH);
+    Serial.println("Segments 1-2 ON");
     break;
   case 3:
-    digitalWrite(LED_BLUE_1, HIGH);
-    digitalWrite(LED_BLUE_2, HIGH);
-    digitalWrite(LED_RED_1, HIGH);
-    digitalWrite(LED_RED_2, HIGH);
-    Serial.println("Blue LED 1 ON");
+    digitalWrite(SEGMENT_1, HIGH);
+    digitalWrite(SEGMENT_2, HIGH);
+    digitalWrite(SEGMENT_3, HIGH);
+    Serial.println("Segments 1-3 ON (Medium level)");
     break;
   case 4:
-    digitalWrite(LED_BLUE_2, HIGH);
-    digitalWrite(LED_RED_1, HIGH);
-    digitalWrite(LED_RED_2, HIGH);
-    Serial.println("Blue LED 2 ON");
+    digitalWrite(SEGMENT_1, HIGH);
+    digitalWrite(SEGMENT_2, HIGH);
+    digitalWrite(SEGMENT_3, HIGH);
+    digitalWrite(SEGMENT_4, HIGH);
+    Serial.println("Segments 1-4 ON (High level)");
     break;
   case 5:
-    digitalWrite(LED_RED_1, HIGH);
-    digitalWrite(LED_RED_2, HIGH);
-    Serial.println("Red LED 1 ON");
-    break;
-  case 6:
-    digitalWrite(LED_RED_2, HIGH);
-    Serial.println("Red LED 2 ON");
+    digitalWrite(SEGMENT_1, HIGH);
+    digitalWrite(SEGMENT_2, HIGH);
+    digitalWrite(SEGMENT_3, HIGH);
+    digitalWrite(SEGMENT_4, HIGH);
+    digitalWrite(SEGMENT_5, HIGH);
+    Serial.println("ALL segments ON (Maximum level)");
     break;
   default:
-    Serial.println("Value out of range (2-22)");
-    offLeds();
+    Serial.println("Value out of range");
     break;
   }
 }
 
-void reconnect()
+// void reconnect()
+// {
+//   while (!client.connected())
+//   {
+//     Serial.print("Connecting to MQTT...");
+//     digitalWrite(SEGMENT_4, HIGH); // Індикація підключення MQTT
+//     if (client.connect(mqtt_client_id, mqtt_user, mqtt_password))
+//     {
+//       Serial.println("connected!");
+//       client.subscribe(mqtt_topic);
+//       digitalWrite(SEGMENT_5, HIGH); // Успішне підключення
+//     }
+//     else
+//     {
+//       Serial.print("failed, error code = ");
+//       Serial.print(client.state());
+//       Serial.println(" trying again in 5 seconds");
+
+//       digitalWrite(SEGMENT_4, LOW);
+
+//       delay(5000);
+//     }
+//   }
+// }
+
+void initSensor()
 {
-  while (!client.connected())
-  {
-    Serial.print("Connecting to MQTT...");
-    digitalWrite(LED_RED_1, HIGH);
-    if (client.connect(mqtt_client_id, mqtt_user, mqtt_password))
-    {
-      Serial.println("connected!");
-      client.subscribe(mqtt_topic);
-      digitalWrite(LED_RED_2, HIGH);
+  Serial.println("Initializing VL53L0X sensor...");
+  
+  // Ініціалізація I2C
+  Wire.begin(D6, D5); // SDA=D6, SCL=D5
+  
+  sensor.setTimeout(500);
+  if (!sensor.init()) {
+    Serial.println(F("Failed to detect and initialize VL53L0X sensor!"));
+    // Показати помилку через мигання всіх сегментів
+    for (int i = 0; i < 10; i++) {
+      digitalWrite(SEGMENT_1, HIGH);
+      digitalWrite(SEGMENT_2, HIGH);
+      digitalWrite(SEGMENT_3, HIGH);
+      digitalWrite(SEGMENT_4, HIGH);
+      digitalWrite(SEGMENT_5, HIGH);
+      delay(200);
+      offLeds();
+      delay(200);
     }
-    else
-    {
-      Serial.print("failed, error code = ");
-      Serial.print(client.state());
-      Serial.println(" trying again in 5 seconds");
+    while(1); // Зупинити виконання
+  }
+  
+  // Налаштування таймінгу для високої точності
+  sensor.setMeasurementTimingBudget(200000); // 200ms
+  
+  Serial.println(F("VL53L0X sensor initialized successfully!"));
+}
 
-      digitalWrite(LED_RED_1, LOW);
+float readDistance()
+{
+  uint16_t rawDistance = sensor.readRangeSingleMillimeters();
+  
+  if (sensor.timeoutOccurred()) {
+    Serial.println("Distance sensor: TIMEOUT");
+    lastDistance = -1;
+    return lastDistance;
+  }
 
-      delay(5000);
+  if(fillingUp) {
+    if(rawDistance < lastDistance) {
+      lastDistance = rawDistance;
+    }
+  } else {
+    if(rawDistance > lastDistance) {
+      lastDistance = rawDistance;
     }
   }
+  
+  return lastDistance;
 }
 
 void setup()
@@ -278,46 +330,86 @@ void setup()
   Serial.println("==========================");
   Serial.println("ESP8266 started!");
 
-  // Ініціалізація пінів світлодіодів
-  Serial.println("Initializing LEDs...");
-  pinMode(LED_GREEN_1, OUTPUT);
-  pinMode(LED_GREEN_2, OUTPUT);
-  pinMode(LED_BLUE_1, OUTPUT);
-  pinMode(LED_BLUE_2, OUTPUT);
-  pinMode(LED_RED_1, OUTPUT);
-  pinMode(LED_RED_2, OUTPUT);
+  // Ініціалізація пінів 5-сегментного індикатора
+  Serial.println("Initializing 5-segment indicator...");
+  pinMode(SEGMENT_1, OUTPUT);
+  pinMode(SEGMENT_2, OUTPUT);
+  pinMode(SEGMENT_3, OUTPUT);
+  pinMode(SEGMENT_4, OUTPUT);
+  pinMode(SEGMENT_5, OUTPUT);
 
-  // Вимкнути всі світлодіоди на початку
-  digitalWrite(LED_GREEN_1, LOW);
-  digitalWrite(LED_GREEN_2, LOW);
-  digitalWrite(LED_BLUE_1, LOW);
-  digitalWrite(LED_BLUE_2, LOW);
-  digitalWrite(LED_RED_1, LOW);
-  digitalWrite(LED_RED_2, LOW);
-  Serial.println("LEDs initialized!");
+  // Вимкнути всі сегменти на початку
+  digitalWrite(SEGMENT_1, LOW);
+  digitalWrite(SEGMENT_2, LOW);
+  digitalWrite(SEGMENT_3, LOW);
+  digitalWrite(SEGMENT_4, LOW);
+  digitalWrite(SEGMENT_5, LOW);
+  Serial.println("5-segment indicator initialized!");
 
-  // Тест світлодіодів
+  // Ініціалізація сенсорної кнопки
+  pinMode(TOUCH_BUTTON_PIN, INPUT);
+  Serial.println("Touch button initialized!");
+
+  // Тест 5-сегментного індикатора
   testLeds();
 
-  digitalWrite(LED_GREEN_1, HIGH);
-  digitalWrite(LED_GREEN_2, HIGH);
+  // Ініціалізація VL53L0X сенсора
+  initSensor();
 
-  Serial.println("Attempting WiFi connection...");
-  setup_wifi();
-
-  Serial.println("Setting up MQTT...");
-  client.setServer(mqtt_server, 1883);
-  client.setCallback(callback);
-
-  Serial.println("Water Level Indicator ready!");
+  Serial.println("Water Level Indicator with VL53L0X ready!");
 }
 
 void loop()
 {
-  if (!client.connected())
-  {
-    Serial.println("MQTT disconnected, attempting reconnection...");
-    reconnect();
+  // Читання стану сенсорної кнопки
+  int reading = digitalRead(TOUCH_BUTTON_PIN);
+  
+  // Обробка сенсорної кнопки (реагуємо на HIGH сигнал)
+  if (reading == HIGH && lastTouchState == LOW && (millis() - lastTouchTime > touchDebounceDelay)) {
+    fillingUp = !fillingUp;
+    Serial.print("Touch button pressed! fillingUp mode changed to: ");
+    Serial.println(fillingUp ? "FILLING" : "DRAINING");
+    
+    // Візуальна індикація перемикання режиму
+    for (int i = 0; i < 3; i++) {
+      digitalWrite(SEGMENT_3, HIGH);
+      delay(100);
+      digitalWrite(SEGMENT_3, LOW);
+      delay(100);
+    }
+    
+    lastTouchTime = millis();
   }
-  client.loop();
+  
+  lastTouchState = reading;
+    
+  // Періодичне вимірювання відстані
+  if (millis() - lastMeasurement > MEASUREMENT_INTERVAL) {
+    int distance = readDistance();
+    Serial.print("Final distance: ");
+    Serial.print(distance);
+    Serial.println(" mm");
+
+    if(distance == -1) {
+      Serial.println("Invalid distance reading, skipping...");
+      if(fillingUp) {
+        fillingUp = false;
+        Serial.println("Switching to draining mode.");
+      }
+
+      return;
+    } else {
+      float waterLevel = MAX_TANK_HEIGHT - distance; // Рівень води в мм
+      controlLEDs(waterLevel);
+    }
+    
+    lastMeasurement = millis();
+  }
+  
+  // Підтримка MQTT з'єднання (опціонально)
+  // if (!client.connected()) {
+  //   // Можна залишити для дистанційного моніторингу
+  //   // reconnect();
+  // }
+  // client.loop();
 }

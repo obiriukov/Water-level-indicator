@@ -1,4 +1,4 @@
 @echo off
-echo Starting ESP8266 Monitor on COM3...
-powershell -Command "$port = New-Object System.IO.Ports.SerialPort('COM3', 115200, [System.IO.Ports.Parity]::None, 8, [System.IO.Ports.StopBits]::One); $port.ReadTimeout = 1000; $port.Open(); Write-Host '=== ESP8266 Monitor - COM3 @ 115200 baud ===' -ForegroundColor Yellow; try { while($true) { try { $line = $port.ReadLine(); Write-Host $line -ForegroundColor Green } catch [System.TimeoutException] { Write-Host '.' -NoNewline -ForegroundColor DarkGray } catch { Write-Host 'Error: $_' -ForegroundColor Red; break } } } finally { $port.Close(); Write-Host 'Monitor stopped.' -ForegroundColor Yellow }"
+echo Starting ESP8266 Monitor on COM5...
+powershell -Command "$port = New-Object System.IO.Ports.SerialPort('COM5', 115200, [System.IO.Ports.Parity]::None, 8, [System.IO.Ports.StopBits]::One); $port.ReadTimeout = 1000; $port.Open(); Write-Host '=== ESP8266 Monitor - COM5 @ 115200 baud ===' -ForegroundColor Yellow; try { while($true) { try { $line = $port.ReadLine(); Write-Host $line -ForegroundColor Green } catch [System.TimeoutException] { Write-Host '.' -NoNewline -ForegroundColor DarkGray } catch { Write-Host 'Error: $_' -ForegroundColor Red; break } } } finally { $port.Close(); Write-Host 'Monitor stopped.' -ForegroundColor Yellow }"
 pause
